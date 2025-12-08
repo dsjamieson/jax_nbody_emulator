@@ -4,6 +4,11 @@ Subbox processing utilities for handling large volumes.
 
 Splits large 3D volumes into smaller overlapping subboxes for GPU processing,
 then reassembles the results with proper boundary handling.
+
+Copyright (C) 2025 Drew Jamieson
+Licensed under GNU GPL v3.0 - see LICENSE file for details.
+
+Author: Drew Jamieson <drew.s.jamieson@gmail.com>
 """
 
 from dataclasses import dataclass

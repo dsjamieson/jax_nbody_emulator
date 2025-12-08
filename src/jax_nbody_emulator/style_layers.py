@@ -3,6 +3,11 @@ StyleGAN-inspired 3D convolutional layers with style conditioning.
 
 This module contains the basic building blocks for styled 3D convolutions,
 including the base class and specific layer implementations.
+
+Copyright (C) 2025 Drew Jamieson
+Licensed under GNU GPL v3.0 - see LICENSE file for details.
+
+Author: Drew Jamieson <drew.s.jamieson@gmail.com>
 """
 
 import jax

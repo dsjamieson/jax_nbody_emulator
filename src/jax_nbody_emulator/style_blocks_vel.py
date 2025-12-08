@@ -4,6 +4,11 @@ High-level blocks composed of styled layers for building neural networks.
 This module contains composite blocks that combine multiple styled layers
 to create more complex network components like residual blocks and 
 resampling blocks.
+
+Copyright (C) 2025 Drew Jamieson
+Licensed under GNU GPL v3.0 - see LICENSE file for details.
+
+Author: Drew Jamieson <drew.s.jamieson@gmail.com>
 """
 
 import jax

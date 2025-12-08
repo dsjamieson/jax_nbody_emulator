@@ -3,6 +3,11 @@ Cosmological functions for flat LambdaCDM universe.
 
 This module provides JAX-accelerated functions for computing various
 cosmological quantities in a flat LambdaCDM universe model.
+
+Copyright (C) 2025 Drew Jamieson
+Licensed under GNU GPL v3.0 - see LICENSE file for details.
+
+Author: Drew Jamieson <drew.s.jamieson@gmail.com>
 """
 
 import jax

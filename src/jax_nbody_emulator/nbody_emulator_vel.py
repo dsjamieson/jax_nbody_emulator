@@ -4,6 +4,11 @@ Main N-body emulator model implementation.
 This module contains the primary NBodyEmulator class that implements
 a 3D U-Net-like architecture with style conditioning for cosmological
 N-body simulations.
+
+Copyright (C) 2025 Drew Jamieson
+Licensed under GNU GPL v3.0 - see LICENSE file for details.
+
+Author: Drew Jamieson <drew.s.jamieson@gmail.com>
 """
 
 import jax

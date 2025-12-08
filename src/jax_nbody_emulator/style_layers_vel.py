@@ -4,6 +4,11 @@ StyleGAN-inspired 3D convolutional layers with style conditioning and manual for
 This is the "Vel" (velocity) version that computes both outputs and their derivatives
 w.r.t. the style parameter s[1] (growth factor Dz) using manual forward-mode automatic
 differentiation. Used for predicting both displacement and velocity fields simultaneously.
+
+Copyright (C) 2025 Drew Jamieson
+Licensed under GNU GPL v3.0 - see LICENSE file for details.
+
+Author: Drew Jamieson <drew.s.jamieson@gmail.com>
 """
 
 import jax

@@ -30,14 +30,20 @@ keywords = ["cosmology", "nbody", "neural-networks", "jax", "emulation"]
 
 dependencies = [
     "jax>=0.4.0",
-    "jaxlib>=0.4.0",
     "flax>=0.7.0",
     "numpy>=1.21.0",
     "matplotlib>=3.5.0",
     "msgpack>=1.0.0",
+    "tqdm>=4.60.0",
 ]
 
 [project.optional-dependencies]
+cuda12 = [
+    "jax[cuda12_pip]>=0.4.0",
+]
+cuda11 = [
+    "jax[cuda11_pip]>=0.4.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -85,3 +91,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 #addopts = "--cov=src/nbody_emulator --cov-report=html --cov-report=term-missing"
+
+[tool.setuptools.package-data]
+jax_nbody_emulator = ["model_parameters/*.npz"]
