@@ -351,14 +351,12 @@ def create_emulator(
                     "when premodulate=True and load_params=True"
                 )
             if compute_vel:
-                from .nbody_emulator_vel_core import modulate_emulator_parameters_vel
                 params = modulate_emulator_parameters_vel(
                     params, 
                     premodulate_z, 
                     premodulate_Om 
                 )
             else:
-                from .nbody_emulator_core import modulate_emulator_parameters
                 params = modulate_emulator_parameters(
                     params, 
                     premodulate_z, 

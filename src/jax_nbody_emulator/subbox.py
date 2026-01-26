@@ -24,10 +24,21 @@ from .style_nbody_emulator_vel_core import StyleNBodyEmulatorVelCore
 
 @dataclass
 class SubboxConfig:
-    """Configuration for subbox processing."""
+    """
+    Configuration for subbox processing.
+    
+    Attributes:
+        size: Full box size (D, H, W)
+        ndiv: Number of divisions along each dimension
+        dtype: Precision for GPU computation (jnp.float16 or jnp.float32)
+        output_dtype: Precision for output arrays (np.float16 or np.float32)
+        in_chan: Number of input channels (default: 3 for displacement)
+        padding: Padding on each side for each dimension
+    """
     size: tuple[int, int, int]
     ndiv: tuple[int, int, int]
     dtype: jnp.dtype = jnp.float32
+    output_dtype: np.dtype = np.float32
     in_chan: int = 3
     padding: tuple[tuple[int, int], tuple[int, int], tuple[int, int]] = ((48, 48), (48, 48), (48, 48))
 
@@ -112,14 +123,14 @@ class SubboxProcessor:
 
         model_type = type(model)
 
-        if model_type == NBodyEmulatorCore or model_type == NBodyEmulatorVelCore :
+        if model_type == NBodyEmulatorCore or model_type == NBodyEmulatorVelCore:
             self.premodulate = True
-        elif model_type == StyleNBodyEmulatorCore or model_type == StyleNBodyEmulatorVelCore :
+        elif model_type == StyleNBodyEmulatorCore or model_type == StyleNBodyEmulatorVelCore:
             self.premodulate = False
 
-        if model_type == NBodyEmulatorVelCore or model_type == StyleNBodyEmulatorVelCore :
+        if model_type == NBodyEmulatorVelCore or model_type == StyleNBodyEmulatorVelCore:
             self.compute_vel = True
-        elif model_type == NBodyEmulatorCore or model_type == StyleNBodyEmulatorCore :
+        elif model_type == NBodyEmulatorCore or model_type == StyleNBodyEmulatorCore:
             self.compute_vel = False
         
         # JIT compile the appropriate apply function
@@ -144,13 +155,19 @@ class SubboxProcessor:
             show_progress: Whether to show progress bar
             
         Returns:
-            If compute_vel=False: displacement (C, D, H, W) on CPU as float32
+            If compute_vel=False: displacement (C, D, H, W) on CPU
             If compute_vel=True: (displacement, velocity) tuple
+            
+        Note:
+            Output dtype is determined by config.output_dtype (default: np.float32).
+            Use np.float16 for large volumes to reduce memory usage.
         """
+        output_dtype = self.config.output_dtype
+        
         # Allocate output arrays on CPU
-        dis_out = np.zeros((self.config.in_chan,) + self.config.size, dtype=np.float32)
+        dis_out = np.zeros((self.config.in_chan,) + self.config.size, dtype=output_dtype)
         if self.compute_vel:
-            vel_out = np.zeros((self.config.in_chan,) + self.config.size, dtype=np.float32)
+            vel_out = np.zeros((self.config.in_chan,) + self.config.size, dtype=output_dtype)
         
         # Compute cosmology once in FP32 (for accuracy)
         Dz = jnp.atleast_1d(growth_factor(z, Om))
@@ -187,15 +204,15 @@ class SubboxProcessor:
             # Call model with appropriate signature
             result = self._apply_model(input_crop_gpu, Om, Dz, vel_fac)
             
-            # Transfer to CPU immediately and convert to FP32
+            # Transfer to CPU immediately and convert to output dtype
             add_inds = self.config.all_add_inds[idx]
             
             if self.compute_vel:
                 dis_crop, vel_crop = result
-                dis_out[add_inds] = np.array(dis_crop[0]).astype(np.float32)
-                vel_out[add_inds] = np.array(vel_crop[0]).astype(np.float32)
+                dis_out[add_inds] = np.asarray(dis_crop[0]).astype(output_dtype)
+                vel_out[add_inds] = np.asarray(vel_crop[0]).astype(output_dtype)
             else:
-                dis_out[add_inds] = np.array(result[0]).astype(np.float32)
+                dis_out[add_inds] = np.asarray(result[0]).astype(output_dtype)
         
         if self.compute_vel:
             return dis_out, vel_out

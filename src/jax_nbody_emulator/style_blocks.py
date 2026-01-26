@@ -158,4 +158,3 @@ class StyleResNetBlock3D(nn.Module):
             x = act(x)
         
         return x
-

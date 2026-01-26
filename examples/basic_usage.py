@@ -1,6 +1,17 @@
 """
 Basic usage example for the JAX N-body emulator.
 
+Quick start (copy-paste this):
+
+    import numpy as np
+    from jax_nbody_emulator import create_emulator, SubboxConfig
+    
+    config = SubboxConfig(size=(512, 512, 512), ndiv=(4, 4, 4))
+    emulator = create_emulator(compute_vel=True, processor_config=config)
+    
+    input_displacement = np.random.randn(3, 512, 512, 512).astype(np.float32)
+    displacement, velocity = emulator.process_box(input_displacement, z=0.5, Om=0.3)
+
 Copyright (C) 2025 Drew Jamieson
 Licensed under GNU GPL v3.0 - see LICENSE file for details.
 
@@ -9,78 +20,129 @@ Author: Drew Jamieson <drew.s.jamieson@gmail.com>
 
 import jax
 import jax.numpy as jnp
-import jax_nbody_emulator as jne
-from jax_nbody_emulator import NBodyEmulator, NBodyEmulatorVel, D, H, vel_norm
+import numpy as np
+
+from jax_nbody_emulator import (
+    create_emulator,
+    SubboxConfig,
+    load_default_parameters,
+    growth_factor,
+    hubble_rate,
+    growth_rate,
+    vel_norm,
+)
+
 
 def main():
-    # Initialize random key
+    print("=" * 60)
+    print("JAX N-body Emulator - Basic Usage Example")
+    print("=" * 60)
+    
+    # =========================================================================
+    # Example 1: Quick start with create_emulator (recommended)
+    # =========================================================================
+    print("\n--- Example 1: Using create_emulator (recommended) ---\n")
+    
+    # Configure subbox processing for a 128³ volume
+    config = SubboxConfig(
+        size=(128, 128, 128),
+        ndiv=(2, 2, 2),  # Divide into 8 subboxes
+    )
+    
+    # Create emulator with velocity output
+    emulator = create_emulator(
+        compute_vel=True,
+        processor_config=config,
+    )
+    
+    # Create test input (3, 128, 128, 128) - no batch dimension for process_box
     key = jax.random.PRNGKey(42)
+    input_displacement = np.array(jax.random.normal(key, (3, 128, 128, 128)))
     
-    # Create a simple test input
-    pad = 48 # The full model needs 48 voxels of periodic padding on all sides
-    ngrid_in = 32 # Size of input without padding 
-    ngrid_pad = ngrid_in + 2 * pad # Size of input with padding
-    input_shape = (1, 3, ngrid_pad, ngrid_pad, ngrid_pad)  # The first element is the batch dimension
-    dis_in = jax.random.normal(key, input_shape) # Input represents z=0 displacement field
+    # Process the box
+    z = 0.5
+    Om = 0.3
+    displacement, velocity = emulator.process_box(input_displacement, z=z, Om=Om)
     
-    # Cosmological parameters
-    Om = jnp.array([0.3]) # Omega_m
-    z = jnp.array([0.5])  # desired redshift of output
-    growth_factor = D(z, Om)
-
-    # Load emulator parameters
-    nbody_emulator_params = jne.load_default_parameters()
-    print(f"Model has {sum(p.size for p in jax.tree.leaves(nbody_emulator_params))} parameters")
- 
-    for k in nbody_emulator_params.keys() :
-        print(k)
-        for kk in nbody_emulator_params[k].keys() :
-            print(f"  {kk}")
-            for k2 in nbody_emulator_params[k][kk].keys() :
-                print(f"    {k2}", end = "")
-                for k3 in nbody_emulator_params[k][kk][k2].keys() :
-                    print(f" {k3}", end = "")
-                print()
-
-
-    exit()
-   
-    # Create emulator without velocity output
-    emulator = NBodyEmulator(
-        style_size=2,
-        in_chan=3,
-        out_chan=3,
-        mid_chan=64
+    print(f"Input shape: {input_displacement.shape}")
+    print(f"Output displacement shape: {displacement.shape}")
+    print(f"Output velocity shape: {velocity.shape}")
+    
+    # =========================================================================
+    # Example 2: Fixed cosmology mode (faster for repeated inference)
+    # =========================================================================
+    print("\n--- Example 2: Fixed cosmology (premodulated) ---\n")
+    
+    emulator_premod = create_emulator(
+        premodulate=True,
+        premodulate_z=0.5,
+        premodulate_Om=0.3,
+        compute_vel=True,
+        processor_config=config,
     )
-
-    # Forward pass
-    dis_out = emulator.apply(nbody_emulator_params, dis_in, Om, growth_factor)
     
-    print(f"Input shape: {dis_in.shape}")
-    print(f"Output shape: {dis_out.shape}")
+    # Process multiple boxes with same cosmology
+    for i in range(3):
+        key = jax.random.PRNGKey(i)
+        input_box = np.array(jax.random.normal(key, (3, 128, 128, 128)))
+        disp, vel = emulator_premod.process_box(input_box, z=0.5, Om=0.3)
+        print(f"Box {i+1}: displacement range [{disp.min():.3f}, {disp.max():.3f}]")
     
-    # conversion factor d/dD(z) dis_out --> pecular velocity
-    vel_factor = vel_norm(z, Om)
-
-    # Create model with velocity output
-    emulator = NBodyEmulatorVel(
-        style_size=2,
-        in_chan=3,
-        out_chan=3,
-        mid_chan=64
-    )
-
-    # Forward pass
-    dis_out, vel_out = emulator.apply(nbody_emulator_params, dis_in, Om, growth_factor, vel_factor)
-
-    print(f"Output shapes with velocities: {dis_out.shape} {vel_out.shape}")
-
-    # Example cosmological calculations
-    D_z = D(z[0], Om[0])
-    H_z = H(z[0], Om[0])
+    # =========================================================================
+    # Example 3: Direct model access (for advanced users)
+    # =========================================================================
+    print("\n--- Example 3: Direct model access ---\n")
     
-    print(f"Growth factor D(z={z}) = {D_z:.4f}")
-    print(f"Hubble parameter H(z={z}) = {H_z:.2f} h km/s/Mpc")
+    from jax_nbody_emulator import StyleNBodyEmulatorVelCore
+    
+    # Load pretrained parameters
+    params = load_default_parameters()
+    print(f"Model has {sum(p.size for p in jax.tree.leaves(params)):,} parameters")
+    
+    # Create model
+    model = StyleNBodyEmulatorVelCore()
+    
+    # Prepare input (batch, channels, D, H, W)
+    # Input size must be output_size + 2 * padding (e.g., 32 + 96 = 128)
+    pad = 48
+    ngrid_out = 32
+    ngrid_in = ngrid_out + 2 * pad
+    
+    x = jax.random.normal(key, (1, 3, ngrid_in, ngrid_in, ngrid_in))
+    
+    # Compute cosmological quantities
+    z_arr = jnp.array([z])
+    Om_arr = jnp.array([Om])
+    Dz = growth_factor(z_arr, Om_arr)
+    vn = vel_norm(z_arr, Om_arr)
+    
+    # Run inference
+    disp_out, vel_out = model.apply(params, x, Om_arr, Dz, vn)
+    
+    print(f"Input shape: {x.shape}")
+    print(f"Output shape: {disp_out.shape}")
+    
+    # =========================================================================
+    # Example 4: Cosmology functions
+    # =========================================================================
+    print("\n--- Example 4: Cosmology functions ---\n")
+    
+    z_vals = jnp.array([0.0, 0.5, 1.0, 2.0])
+    Om_vals = jnp.array([0.3, 0.3, 0.3, 0.3])
+    
+    D = growth_factor(z_vals, Om_vals)
+    H = hubble_rate(z_vals, Om_vals)
+    f = growth_rate(z_vals, Om_vals)
+    
+    print(f"{'z':>6} {'D(z)':>10} {'H(z)':>12} {'f(z)':>10}")
+    print("-" * 42)
+    for i in range(len(z_vals)):
+        print(f"{z_vals[i]:>6.1f} {D[i]:>10.4f} {H[i]:>12.2f} {f[i]:>10.4f}")
+    
+    print("\n" + "=" * 60)
+    print("Done!")
+    print("=" * 60)
+
 
 if __name__ == "__main__":
     main()
