@@ -40,6 +40,7 @@ class TestSubboxConfig:
         assert config.ndiv == (2, 2, 2)
         assert config.padding == ((48, 48), (48, 48), (48, 48))
         assert config.dtype == jnp.float32
+        assert config.output_dtype == np.float32
         assert config.NDIM == 3
         assert config.n_subboxes == 8
         assert config.crop_size == (128, 128, 128)
@@ -50,12 +51,14 @@ class TestSubboxConfig:
             size=(512, 256, 128),
             ndiv=(4, 2, 1),
             dtype=jnp.float16,
+            output_dtype=np.float16,
             in_chan=1,
             padding=((32, 32), (32, 32), (32, 32))
         )
         
         assert config.in_chan == 1
         assert config.dtype == jnp.float16
+        assert config.output_dtype == np.float16
         assert config.padding == ((32, 32), (32, 32), (32, 32))
         assert config.n_subboxes == 8
         assert config.crop_size == (128, 128, 128)
@@ -199,6 +202,52 @@ class TestSubboxConfigIndexConsistency:
                         coverage[z, y, x] += 1
         
         assert np.all(coverage == 1)
+
+
+# =============================================================================
+# SubboxConfig Output Dtype Tests
+# =============================================================================
+
+class TestSubboxConfigOutputDtype:
+    """Test SubboxConfig output_dtype parameter"""
+    
+    def test_default_output_dtype_is_float32(self):
+        """Test that default output_dtype is float32"""
+        config = SubboxConfig(
+            size=(128, 128, 128),
+            ndiv=(2, 2, 2),
+        )
+        assert config.output_dtype == np.float32
+    
+    def test_explicit_output_dtype_float16(self):
+        """Test setting output_dtype to float16"""
+        config = SubboxConfig(
+            size=(128, 128, 128),
+            ndiv=(2, 2, 2),
+            output_dtype=np.float16,
+        )
+        assert config.output_dtype == np.float16
+    
+    def test_output_dtype_independent_of_dtype(self):
+        """Test that output_dtype and dtype are independent"""
+        config = SubboxConfig(
+            size=(128, 128, 128),
+            ndiv=(2, 2, 2),
+            dtype=jnp.float16,
+            output_dtype=np.float32,
+        )
+        assert config.dtype == jnp.float16
+        assert config.output_dtype == np.float32
+        
+        # And vice versa
+        config2 = SubboxConfig(
+            size=(128, 128, 128),
+            ndiv=(2, 2, 2),
+            dtype=jnp.float32,
+            output_dtype=np.float16,
+        )
+        assert config2.dtype == jnp.float32
+        assert config2.output_dtype == np.float16
 
 
 # =============================================================================
@@ -571,7 +620,7 @@ class TestSubboxProcessorDtypes:
         input_box = np.random.randn(3, 64, 64, 64).astype(np.float32)
         output = processor.process_box(input_box, z=0.0, Om=0.3, show_progress=False)
         
-        # Output should be converted back to float32
+        # Output should be in output_dtype (default float32)
         assert output.dtype == np.float32
         assert np.all(np.isfinite(output))
     
@@ -602,6 +651,157 @@ class TestSubboxProcessorDtypes:
         
         assert output.dtype == np.float32
         assert np.all(np.isfinite(output))
+
+
+# =============================================================================
+# Output Dtype Tests
+# =============================================================================
+
+class TestSubboxProcessorOutputDtype:
+    """Test output_dtype handling in subbox processor"""
+    
+    @pytest.fixture
+    def model_and_params(self):
+        """Set up model and params for reuse"""
+        key = random.PRNGKey(42)
+        model = NBodyEmulatorCore()
+        
+        spatial_size = 128
+        x = random.normal(key, (1, 3, spatial_size, spatial_size, spatial_size))
+        Dz = jnp.array([1.0])
+        params = model.init(key, x, Dz)
+        
+        return model, params
+    
+    @pytest.fixture
+    def model_and_params_vel(self):
+        """Set up velocity model and params for reuse"""
+        key = random.PRNGKey(42)
+        model = NBodyEmulatorVelCore()
+        
+        spatial_size = 128
+        x = random.normal(key, (1, 3, spatial_size, spatial_size, spatial_size))
+        Dz = jnp.array([1.0])
+        vel_fac = jnp.array([1.0])
+        params = model.init(key, x, Dz, vel_fac)
+        
+        return model, params
+    
+    def test_output_dtype_float16(self, model_and_params):
+        """Test that output respects output_dtype=float16"""
+        model, params = model_and_params
+        
+        config = SubboxConfig(
+            size=(64, 64, 64),
+            ndiv=(2, 2, 2),
+            dtype=jnp.float32,
+            output_dtype=np.float16,
+        )
+        
+        processor = SubboxProcessor(model=model, params=params, config=config)
+        
+        input_box = np.random.randn(3, 64, 64, 64).astype(np.float32)
+        output = processor.process_box(input_box, z=0.0, Om=0.3, show_progress=False)
+        
+        assert output.dtype == np.float16
+        assert np.all(np.isfinite(output))
+    
+    def test_output_dtype_float32(self, model_and_params):
+        """Test that output respects output_dtype=float32"""
+        model, params = model_and_params
+        
+        config = SubboxConfig(
+            size=(64, 64, 64),
+            ndiv=(2, 2, 2),
+            dtype=jnp.float32,
+            output_dtype=np.float32,
+        )
+        
+        processor = SubboxProcessor(model=model, params=params, config=config)
+        
+        input_box = np.random.randn(3, 64, 64, 64).astype(np.float32)
+        output = processor.process_box(input_box, z=0.0, Om=0.3, show_progress=False)
+        
+        assert output.dtype == np.float32
+        assert np.all(np.isfinite(output))
+    
+    def test_output_dtype_with_fp16_compute(self, model_and_params):
+        """Test output_dtype with FP16 compute dtype"""
+        model, params = model_and_params
+        
+        config = SubboxConfig(
+            size=(64, 64, 64),
+            ndiv=(2, 2, 2),
+            dtype=jnp.float16,
+            output_dtype=np.float16,
+        )
+        
+        processor = SubboxProcessor(model=model, params=params, config=config)
+        
+        input_box = np.random.randn(3, 64, 64, 64).astype(np.float32)
+        output = processor.process_box(input_box, z=0.0, Om=0.3, show_progress=False)
+        
+        assert output.dtype == np.float16
+        assert np.all(np.isfinite(output))
+    
+    def test_output_dtype_fp16_compute_fp32_output(self, model_and_params):
+        """Test FP16 compute with FP32 output"""
+        model, params = model_and_params
+        
+        config = SubboxConfig(
+            size=(64, 64, 64),
+            ndiv=(2, 2, 2),
+            dtype=jnp.float16,
+            output_dtype=np.float32,
+        )
+        
+        processor = SubboxProcessor(model=model, params=params, config=config)
+        
+        input_box = np.random.randn(3, 64, 64, 64).astype(np.float32)
+        output = processor.process_box(input_box, z=0.0, Om=0.3, show_progress=False)
+        
+        assert output.dtype == np.float32
+        assert np.all(np.isfinite(output))
+    
+    def test_velocity_output_dtype_float16(self, model_and_params_vel):
+        """Test that both displacement and velocity respect output_dtype=float16"""
+        model, params = model_and_params_vel
+        
+        config = SubboxConfig(
+            size=(64, 64, 64),
+            ndiv=(2, 2, 2),
+            output_dtype=np.float16,
+        )
+        
+        processor = SubboxProcessor(model=model, params=params, config=config)
+        
+        input_box = np.random.randn(3, 64, 64, 64).astype(np.float32)
+        displacement, velocity = processor.process_box(input_box, z=0.0, Om=0.3, show_progress=False)
+        
+        assert displacement.dtype == np.float16
+        assert velocity.dtype == np.float16
+        assert np.all(np.isfinite(displacement))
+        assert np.all(np.isfinite(velocity))
+    
+    def test_velocity_output_dtype_float32(self, model_and_params_vel):
+        """Test that both displacement and velocity respect output_dtype=float32"""
+        model, params = model_and_params_vel
+        
+        config = SubboxConfig(
+            size=(64, 64, 64),
+            ndiv=(2, 2, 2),
+            output_dtype=np.float32,
+        )
+        
+        processor = SubboxProcessor(model=model, params=params, config=config)
+        
+        input_box = np.random.randn(3, 64, 64, 64).astype(np.float32)
+        displacement, velocity = processor.process_box(input_box, z=0.0, Om=0.3, show_progress=False)
+        
+        assert displacement.dtype == np.float32
+        assert velocity.dtype == np.float32
+        assert np.all(np.isfinite(displacement))
+        assert np.all(np.isfinite(velocity))
 
 
 # =============================================================================
